@@ -60,7 +60,7 @@ public class ChatParticipant extends JFrame implements ActionListener, Runnable 
             String message = textField.getText().trim();
             if (!message.equals("")) {
                 try {
-                    objManager.writeToStream(username + ": " + message);
+                    writeToStream(msg);
                 } catch (IOException ex) {
                     ex.printStackTrace();
                 }
