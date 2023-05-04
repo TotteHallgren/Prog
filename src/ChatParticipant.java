@@ -1,69 +1,95 @@
-import java.awt.BorderLayout;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.net.Socket;
-import javax.swing.JFrame;
-import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
-import javax.swing.JTextField;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.net.*;
+import javax.swing.*;
 
-public class ChatParticipant extends JFrame implements ActionListener {
+public class ChatParticipant extends JFrame implements ActionListener, Runnable {
+
     private static final long serialVersionUID = 1L;
-    private final ObjectStreamManager streamManager;
-    private final ObjectOutputStream outputStream;
-    private final JTextArea chatArea;
-    private final JTextField inputField;
+    private Socket socket;
+    private ObjectStreamManager objManager;
+    private JTextArea textArea;
+    private JTextField textField;
+    private JButton sendButton;
+    private String username;
 
-    public ChatParticipant(Socket socket) throws IOException {
-        this.streamManager = new ObjectStreamManager(new ObjectInputStream(socket.getInputStream()));
-        this.outputStream = new ObjectOutputStream(socket.getOutputStream());
-        this.chatArea = new JTextArea();
-        this.inputField = new JTextField();
-        this.inputField.addActionListener(this);
-        add(new JScrollPane(chatArea), BorderLayout.CENTER);
-        add(inputField, BorderLayout.SOUTH);
-        setSize(400, 300);
-        setVisible(true);
+    public ChatParticipant(Socket socket, String username) {
+        this.socket = socket;
+        this.username = username;
+
+        // Skapa input- och output-strömmar
+        try {
+            objManager = new ObjectStreamManager(socket);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        // Skapa GUI-komponenter
+        textArea = new JTextArea();
+        textField = new JTextField();
+        sendButton = new JButton("Send");
+        sendButton.addActionListener(this);
+
+        // Lägg till komponenter i fönstret
+        add(new JScrollPane(textArea), BorderLayout.CENTER);
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.add(textField, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+        add(inputPanel, BorderLayout.SOUTH);
+
+        // Konfigurera fönstret
+        setTitle("Chat Client");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        // Starta en tråd som lyssnar på objektmeddelanden från servern
-        new Thread(() -> {
-            while (true) {
-                try {
-                    Object obj = streamManager.readObject();
-                    objectReceived(obj);
-                } catch (IOException | ClassNotFoundException e) {
-                    e.printStackTrace();
-                }
-            }
-        }).start();
+        setSize(400, 400);
+        setVisible(true);
+
+        // Starta en ny tråd för att lyssna på meddelanden från servern
+        new Thread(this).start();
     }
 
     public void objectReceived(Object obj) {
         if (obj instanceof String) {
-            String str = (String) obj;
-            showMessage(str);
+            String message = (String) obj;
+            textArea.append(message + "\n");
         }
     }
 
-    @Override
     public void actionPerformed(ActionEvent e) {
-        String text = inputField.getText();
-        inputField.setText("");
-        sendMessage(text);
+        if (e.getSource() == sendButton) {
+            String message = textField.getText().trim();
+            if (!message.equals("")) {
+                try {
+                    objManager.writeToStream(username + ": " + message);
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+                textField.setText("");
+            }
+        }
     }
 
-    public void showMessage(String message) {
-        chatArea.append(message + "\n");
+    public void displayMessage(String message) {
+        textArea.append(message + "\n");
     }
 
     public void sendMessage(String message) {
         try {
-            outputStream.writeObject(message);
-            outputStream.flush();
+            objManager.writeToStream(message);
         } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void run() {
+        try {
+            while (true) {
+                Object obj = objManager.readFromStream();
+                objectReceived(obj);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
