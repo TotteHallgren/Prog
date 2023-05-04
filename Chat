@@ -1,0 +1,186 @@
+public class App {
+    public static void main(String[] args) {
+        ChatParticipant participant = new ChatParticipant();
+        ChatGUI chatGUI = new ChatGUI(participant);
+        chatGUI.createGUI();
+    }
+}
+import java.io.IOException;
+import java.net.Socket;
+
+public class ChatClient {
+    private Socket socket;
+    private String host;
+    private int port;
+
+    public ChatClient(String host, int port) {
+        this.host = host;
+        this.port = port;
+    }
+
+    public void startClient() {
+        try {
+            socket = new Socket(host, port);
+            System.out.println("Connected to server at " + host + ":" + port);
+            ChatParticipant participant = new ChatParticipant(socket);
+            new Thread(participant).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void stopClient() {
+        try {
+            socket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+
+public class ChatGUI {
+    private JFrame frame;
+    private JTextArea chatArea;
+    private JTextField inputField;
+    private JButton sendButton;
+    private ChatParticipant participant;
+
+    public ChatGUI(ChatParticipant participant) {
+        this.participant = participant;
+        createGUI();
+    }
+
+    public void createGUI() {
+        // Skapa ett fönster
+        frame = new JFrame("Chat");
+
+        // Skapa en text area där meddelanden skrivs ut
+        chatArea = new JTextArea(20, 50);
+        chatArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(chatArea);
+
+        // Skapa en text field för att skriva meddelanden
+        inputField = new JTextField(50);
+        inputField.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                sendMessage();
+            }
+        });
+
+        // Skapa en knapp för att skicka meddelanden
+        sendButton = new JButton("Send");
+        sendButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                sendMessage();
+            }
+        });
+
+        // Skapa en panel för text field och knapp
+        JPanel inputPanel = new JPanel(new BorderLayout());
+        inputPanel.add(inputField, BorderLayout.CENTER);
+        inputPanel.add(sendButton, BorderLayout.EAST);
+
+        // Lägg till komponenter till fönstret
+        frame.getContentPane().add(scrollPane, BorderLayout.CENTER);
+        frame.getContentPane().add(inputPanel, BorderLayout.SOUTH);
+        frame.pack();
+        frame.setVisible(true);
+    }
+
+    public void addMessage(String message) {
+        chatArea.append(message + "\n");
+    }
+
+    private void sendMessage() {
+        String message = inputField.getText();
+        if (!message.isEmpty()) {
+            participant.sendMessage(message);
+            inputField.setText("");
+        }
+    }
+}
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.net.Socket;
+
+public class ChatParticipant implements Runnable {
+    private Socket socket;
+    private ObjectInputStream inputStream;
+    private ObjectOutputStream outputStream;
+
+    public ChatParticipant(Socket socket) {
+        this.socket = socket;
+        try {
+            inputStream = new ObjectInputStream(socket.getInputStream());
+            outputStream = new ObjectOutputStream(socket.getOutputStream());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void run() {
+        try {
+            while (true) {
+                String message = (String) inputStream.readObject();
+                System.out.println(message);
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public void sendMessage(String message) {
+        try {
+            outputStream.writeObject(message);
+            outputStream.flush();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
+
+public class ChatServer {
+    private ServerSocket serverSocket;
+    private int port;
+
+    public ChatServer(int port) {
+        this.port = port;
+    }
+
+    public void startServer() {
+        try {
+            serverSocket = new ServerSocket(port);
+            System.out.println("Server started on port " + port);
+            while (true) {
+                Socket socket = serverSocket.accept();
+                System.out.println("Client connected: " + socket.getInetAddress().getHostAddress());
+                ChatParticipant participant = new ChatParticipant(socket);
+                new Thread(participant).start();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void stopServer() {
+        try {
+            serverSocket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
