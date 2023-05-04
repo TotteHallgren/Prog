@@ -1,8 +1,16 @@
 public class App {
     public static void main(String[] args) {
-        ChatParticipant participant = new ChatParticipant();
-        ChatGUI chatGUI = new ChatGUI(participant);
-        chatGUI.createGUI();
+        try {
+            ServerSocket serverSocket = new ServerSocket(5555);
+            System.out.println("Server started");
+
+            Socket socket = new Socket("localhost", 5555);
+
+            ChatGUI gui = new ChatGUI(new ChatParticipant(socket), serverSocket);
+            gui.show();
+        } catch (IOException e) {
+            System.err.println("Error: " + e.getMessage());
+        }
     }
 }
 import java.io.IOException;
