@@ -1,0 +1,162 @@
+package App;
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.net.ServerSocket;
+import java.net.Socket;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        final int port = 2000;
+        System.out.println("Starting Client");
+        try {
+            ChatClient client = new ChatClient(port);
+        } catch (IOException e) {
+            System.out.println("Client failed, starting Server");
+            ChatServer server = new ChatServer(port);
+        }
+    }
+}
+class Chat extends JFrame {
+    private JTextArea chatArea;
+    private JTextField inputField;
+    private JPanel inputPanel;
+    private ObjectOutputStream outputStream;
+    private ObjectInputStream inputStream;
+    Socket socket;
+
+    private boolean running = true;
+    public Chat(Socket chatSocket, boolean isServer) throws IOException {
+        socket = chatSocket;
+        if (isServer) {
+            setTitle("Chat Server");
+        } else {
+            setTitle("Chat Client");
+        }
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        createChatArea();
+        createInputPanel();
+
+        JButton closeButton = new JButton("Close");
+        closeButton.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                running = false;
+                closeChat();
+            }
+        });
+        inputPanel.add(closeButton);
+        // Window size
+        setSize(500, 300);
+        setVisible(true);
+
+        startChatComponent();
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    }
+
+    private void createChatArea() {
+        chatArea = new JTextArea(10, 40);
+        chatArea.setEditable(false);
+        chatArea.setBackground(Color.orange);
+        JScrollPane scrollPane = new JScrollPane(chatArea);
+        add(scrollPane, BorderLayout.CENTER);
+    }
+
+    private void createInputPanel() {
+        inputPanel = new JPanel();
+        inputPanel.setLayout(new BoxLayout(inputPanel, BoxLayout.X_AXIS));
+        inputPanel.setBackground(Color.black);
+        inputField = new JTextField();
+
+
+        inputField.addKeyListener(new KeyAdapter() {
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+                    if (!inputField.getText().isEmpty()) {
+                        String message = inputField.getText();
+                        appendToChatArea("You" + ": " + message);
+                        sendMessage(message);
+                        inputField.setText("");
+                    }
+                }
+            }
+        });
+        inputPanel.add(inputField);
+        add(inputPanel, BorderLayout.SOUTH);
+    }
+
+    private void appendToChatArea(String message) {
+        chatArea.append(message + "\n");
+    }
+
+    private void sendMessage(String message) {
+        try {
+            outputStream.writeObject(message);
+        } catch (IOException ex) {
+            System.out.println("Error sending message");
+        }
+    }
+
+    void startChatComponent() {
+        try {
+            outputStream = new ObjectOutputStream(socket.getOutputStream());
+            inputStream = new ObjectInputStream(socket.getInputStream());
+            while (running) {
+                try {
+                    String message = (String) inputStream.readObject();
+                    appendToChatArea("Other: " + message);
+                    if (message.equals("exit")) {
+                        closeChat();
+                    }
+                } catch (ClassNotFoundException ex) {
+                    System.out.println("Unexpected message type");
+                }
+            }
+        } catch (IOException ex) {}
+    }
+
+    private void closeChat() {
+        running = false;
+        try {
+            outputStream.writeObject("exit");
+            socket.close();
+            outputStream.close();
+            inputStream.close();
+        } catch (IOException ex) {
+            System.out.println("Error closing resources");
+        }
+        JOptionPane.showMessageDialog(this, "The chat has been closed");
+        dispose();
+    }
+}
+
+class ChatClient {
+    Socket socket;
+    boolean isServer = false;
+    public ChatClient(int port) throws IOException {
+        socket = new Socket("localhost", port);
+        Chat chat = new Chat(socket, isServer);
+    }
+}
+
+class ChatServer {
+    Socket socket;
+    boolean isServer = true;
+    public ChatServer(int port) throws IOException {
+        try (ServerSocket serverSocket = new ServerSocket(port)){
+            JOptionPane.showMessageDialog(null, "Waiting for a client to connect");
+            socket = serverSocket.accept();
+            Chat chat = new Chat(socket, isServer);
+        } catch (IOException ex) {
+            System.out.println("Error starting server");
+        }
+    }
+}
+
